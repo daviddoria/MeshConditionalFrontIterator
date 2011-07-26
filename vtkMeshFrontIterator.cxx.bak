@@ -1,0 +1,202 @@
+#include "vtkMeshFrontIterator.h"
+#include "vtkBitArray.h"
+#include "vtkPolyData.h"
+#include "vtkIdList.h"
+#include "vtkObjectFactory.h"
+
+#include <vtkstd/algorithm>
+
+vtkCxxRevisionMacro(vtkMeshFrontIterator, "$Revision$");
+vtkStandardNewMacro(vtkMeshFrontIterator);
+
+void vtkMeshFrontIterator::UniqueQueue::push_back(int val)
+{
+  vtkstd::deque<int>::iterator pos = vtkstd::find( this->q.begin(), this->q.end(), val);
+  if ( pos == this->q.end())
+    {
+    this->q.push_front(val); 
+    }
+}
+
+void vtkMeshFrontIterator::UniqueQueue::clear()
+{
+  this->q.clear();
+}
+
+void vtkMeshFrontIterator::UniqueQueue::pop_front()
+{
+  this->q.pop_front();
+}
+
+int vtkMeshFrontIterator::UniqueQueue::front()
+{
+  return this->q.front();
+}
+
+bool vtkMeshFrontIterator::UniqueQueue::empty()
+{
+  return this->q.empty();
+}
+
+vtkMeshFrontIterator::vtkMeshFrontIterator()
+{
+  this->Mesh = NULL;
+  this->StartVertex = -1;
+  this->VisitedArray = vtkSmartPointer<vtkBitArray>::New();
+}
+
+
+void vtkMeshFrontIterator::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os, indent);
+  os << indent << "StartVertex: " << this->StartVertex << endl;
+}
+
+void vtkMeshFrontIterator::Initialize()
+{
+  this->NextId = -1;
+  this->VertexQueue.clear();
+  
+  if (this->Mesh == NULL)
+    {
+    cout << "Error: Mesh is null" << endl;
+    return;
+    }
+    
+  if(this->StartVertex < 0 || this->StartVertex >= this->Mesh->GetNumberOfPoints())
+    {
+    cout << "Error: StartVertex is out of range" << endl;
+    return;
+    }
+    
+  //set all vertices to not visited
+  this->VisitedArray->SetNumberOfValues(this->Mesh->GetNumberOfPoints());
+  for(vtkIdType i = 0; i < this->VisitedArray->GetNumberOfComponents(); i++)
+    {
+    this->VisitedArray->SetValue(i, 0);
+    }
+  
+  vtkSmartPointer<vtkIdList> connectedVertices = GetConnectedVertices(this->Mesh, this->StartVertex);
+  
+  if(connectedVertices->GetNumberOfIds() <= 0)
+    {
+    return;
+    }
+    
+  for(vtkIdType i = 0; i < connectedVertices->GetNumberOfIds(); i++)
+    {
+    cout << "Adding vertex " << connectedVertices->GetId(i) << " to the queue." << endl;
+    this->VertexQueue.push_back(connectedVertices->GetId(i));
+    }
+    
+  this->VisitedArray->SetValue(this->StartVertex, 1);
+    
+  this->NextId = connectedVertices->GetId(0);
+
+  this->Modified();
+}
+
+void vtkMeshFrontIterator::SetMesh(vtkSmartPointer<vtkPolyData> mesh)
+{
+  this->Mesh = mesh;
+  this->Modified();
+}
+
+void vtkMeshFrontIterator::SetStartVertex(vtkIdType vertex)
+{
+  this->StartVertex = vertex;
+  this->Modified();
+}
+
+vtkIdType vtkMeshFrontIterator::Next()
+{
+  if(!this->HasNext())
+    {
+    return -1;
+    }
+    
+  if(this->VertexQueue.empty())
+    {
+    this->NextId = -1;
+    return -1;
+    }
+    
+  //set the next vertex and remove it from the queue
+  this->NextId = this->VertexQueue.front();
+  this->VertexQueue.pop_front();
+  
+  
+  //add everything attached to the next vertex to the queue (if it isn't already in the queue and it hasn't already been visited)
+  vtkSmartPointer<vtkIdList> connectedVertices = GetConnectedVertices(this->Mesh, this->NextId);
+    
+  for(vtkIdType i = 0; i < connectedVertices->GetNumberOfIds(); i++)
+    {
+    bool visited = this->VisitedArray->GetValue(connectedVertices->GetId(i));
+    if(!visited)
+      {
+      this->VertexQueue.push_back(connectedVertices->GetId(i));
+      }
+    }
+    
+  this->VisitedArray->SetValue(this->NextId, 1);
+      
+  return this->NextId;
+}
+
+bool vtkMeshFrontIterator::HasNext()
+{
+  if(this->VertexQueue.empty())
+    {
+    return false;
+    }
+  else
+    {
+    return true;
+    }
+  /*
+  if(this->NextId == -1)
+    {
+    return false;
+    }
+  else
+    {
+    return true;
+    }
+  */
+}
+
+
+vtkSmartPointer<vtkIdList> GetConnectedVertices(vtkSmartPointer<vtkPolyData> mesh, int id)
+{
+  vtkSmartPointer<vtkIdList> connectedVertices = 
+      vtkSmartPointer<vtkIdList>::New();
+  
+  //get all cells that vertex 'id' is a part of
+  vtkSmartPointer<vtkIdList> cellIdList = 
+      vtkSmartPointer<vtkIdList>::New();
+  mesh->GetPointCells(id, cellIdList);
+  
+  for(vtkIdType i = 0; i < cellIdList->GetNumberOfIds(); i++)
+    {
+    cout << "cellId " << i << " : " << cellIdList->GetId(i) << endl;
+    
+    vtkSmartPointer<vtkIdList> pointIdList = 
+      vtkSmartPointer<vtkIdList>::New();
+    mesh->GetCellPoints(cellIdList->GetId(i), pointIdList);
+    
+    cout << "End points are " << pointIdList->GetId(0) << " and " << pointIdList->GetId(1) << endl;
+    
+    if(pointIdList->GetId(0) != id)
+      {
+      //cout << "Connected to " << pointIdList->GetId(0) << endl;
+      connectedVertices->InsertNextId(pointIdList->GetId(0));
+      }
+    else
+      {
+      //cout << "Connected to " << pointIdList->GetId(1) << endl;
+      connectedVertices->InsertNextId(pointIdList->GetId(1));
+      }
+    }
+    
+  return connectedVertices;
+}
