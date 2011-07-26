@@ -1,4 +1,0 @@
-/media/portable/VTK_Additions/vtkMeshConditionalFrontIterator/build/CMakeFiles/vtkMeshConditionalFrontIteratorDefaultExample.dir
-/media/portable/VTK_Additions/vtkMeshConditionalFrontIterator/build/CMakeFiles/vtkMeshConditionalFrontIteratorDemo.dir
-/media/portable/VTK_Additions/vtkMeshConditionalFrontIterator/build/CMakeFiles/vtkMeshConditionalFrontIteratorExample.dir
-/media/portable/VTK_Additions/vtkMeshConditionalFrontIterator/build/CMakeFiles/vtkMeshConditionalFrontIteratorTest.dir
