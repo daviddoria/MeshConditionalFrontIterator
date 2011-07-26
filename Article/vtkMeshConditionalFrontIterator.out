@@ -1,0 +1,12 @@
+\BOOKMARK [1][]{section.1}{Introduction}{}
+\BOOKMARK [1][]{section.2}{Algorithm}{}
+\BOOKMARK [2][]{subsection.2.1}{Initialization}{section.2}
+\BOOKMARK [2][]{subsection.2.2}{Iteration}{section.2}
+\BOOKMARK [1][]{section.3}{Condition Interface}{}
+\BOOKMARK [1][]{section.4}{Provided Conditions}{}
+\BOOKMARK [2][]{subsection.4.1}{NormalCondition}{section.4}
+\BOOKMARK [2][]{subsection.4.2}{ColorCondition}{section.4}
+\BOOKMARK [2][]{subsection.4.3}{DistanceCondition}{section.4}
+\BOOKMARK [1][]{section.5}{Demonstration}{}
+\BOOKMARK [1][]{section.6}{Extracting the region that has been grown}{}
+\BOOKMARK [1][]{section.7}{Code Snippet}{}

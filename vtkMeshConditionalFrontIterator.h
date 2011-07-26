@@ -18,7 +18,10 @@
 #include "vtkObject.h"
 #include "vtkSmartPointer.h"
 
-#include <vtkstd/deque>
+#include "Condition.h"
+
+#include <deque>
+#include <vector>
 
 class vtkPolyData;
 class vtkIdList;
@@ -37,15 +40,18 @@ public:
   void SetMesh(vtkSmartPointer<vtkPolyData> mesh);
 
   // Description:
-  // Set the mesh to iterate over.
-  virtual void GetSelectedRegion(vtkSmartPointer<vtkPolyData> mesh);
+  // Extract the region which has been reached during the propagation.
+  void GetSelectedRegion(vtkPolyData* mesh);
+  
+  // Description:
+  // Mark the region which has been reached during the propagation by adding an array to the input mesh.
+  void MarkSelectedRegion();
   
   // Description:
   // The start vertex of the iterator.
   void SetStartVertex(vtkIdType vertex);
   vtkGetMacro(StartVertex, vtkIdType);
   
-
   // Description:
   // The next vertex to visit.
   vtkIdType Next();
@@ -58,9 +64,17 @@ public:
   // Prepare the iterator.
   void Initialize();
 
+  // Description:
+  // Set the condition to use.
+  void SetCondition(Condition* c);
+  
+  // Description:
+  // Set one of many conditions to use.
+  void AddCondition(Condition* c);
+  
 protected:
   vtkMeshConditionalFrontIterator();
-  ~vtkMeshConditionalFrontIterator() {}
+  ~vtkMeshConditionalFrontIterator();
 
   class UniqueQueue
   {
@@ -74,7 +88,7 @@ protected:
       vtkstd::deque<int> q;
   };
   
-  virtual bool Condition(const int a, const int b);
+  std::vector<Condition*> Conditions;
   
   vtkSmartPointer<vtkPolyData> Mesh;
   

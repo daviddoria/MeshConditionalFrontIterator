@@ -3,20 +3,18 @@
 #include "vtkPolyDataKeepPoints.h"
 
 #include <vtkBitArray.h>
-#include <vtkPolyData.h>
 #include <vtkIdList.h>
+#include <vtkIntArray.h>
 #include <vtkObjectFactory.h>
-#include <vtkFloatArray.h>
 #include <vtkPointData.h>
+#include <vtkPolyData.h>
 
 #include <algorithm>
 
 vtkStandardNewMacro(vtkMeshConditionalFrontIterator);
 
-void vtkMeshConditionalFrontIterator::GetSelectedRegion(vtkSmartPointer<vtkPolyData> selectedRegion)
+void vtkMeshConditionalFrontIterator::GetSelectedRegion(vtkPolyData* selectedRegion)
 {
-  std::cout << "this->Mesh has " << this->Mesh->GetNumberOfPoints() << " points." << std::endl;
-  
   this->Initialize();
   
   vtkSmartPointer<vtkPolyDataKeepPoints> keepPoints =
@@ -34,16 +32,45 @@ void vtkMeshConditionalFrontIterator::GetSelectedRegion(vtkSmartPointer<vtkPolyD
   selectedRegion->ShallowCopy(keepPoints->GetOutput());
 }
 
-bool vtkMeshConditionalFrontIterator::Condition(const int a, const int b)
+void vtkMeshConditionalFrontIterator::MarkSelectedRegion()
 {
-  //In this class, the condition is always true. Subclasses can provide
-  //real condition functions
-  return true;
+  vtkSmartPointer<vtkIntArray> regionLabels = vtkSmartPointer<vtkIntArray>::New();
+  regionLabels->SetNumberOfComponents(1);
+  regionLabels->SetNumberOfValues(this->Mesh->GetNumberOfPoints());
+  regionLabels->SetName("RegionLabels");
+  
+  // Mark all points as not belonging to the region
+  for(unsigned int i = 0; i < this->Mesh->GetNumberOfPoints(); ++i)
+    {
+    regionLabels->SetValue(i, 0);
+    }
+  
+  // Mark points that are reached as belonging to the region
+  this->Initialize();
+  
+  while(this->HasNext())
+    {
+    vtkIdType nextVertex = this->Next();
+    regionLabels->SetValue(nextVertex, 1);
+    }
+    
+  this->Mesh->GetPointData()->AddArray(regionLabels);
+}
+
+void vtkMeshConditionalFrontIterator::SetCondition(Condition* c)
+{
+  this->Conditions.clear();
+  AddCondition(c);
+}
+
+void vtkMeshConditionalFrontIterator::AddCondition(Condition* c)
+{
+  this->Conditions.push_back(c);
 }
 
 void vtkMeshConditionalFrontIterator::UniqueQueue::push_back(int val)
 {
-  vtkstd::deque<int>::iterator pos = vtkstd::find( this->q.begin(), this->q.end(), val);
+  vtkstd::deque<int>::iterator pos = std::find( this->q.begin(), this->q.end(), val);
   if ( pos == this->q.end())
     {
     this->q.push_back(val); 
@@ -76,6 +103,11 @@ vtkMeshConditionalFrontIterator::vtkMeshConditionalFrontIterator()
   this->StartVertex = -1;
   this->VisitedArray = vtkSmartPointer<vtkBitArray>::New();
   this->VisitedArray->SetNumberOfComponents(1);
+}
+
+vtkMeshConditionalFrontIterator::~vtkMeshConditionalFrontIterator()
+{
+
 }
 
 
@@ -119,13 +151,11 @@ void vtkMeshConditionalFrontIterator::SetMesh(vtkSmartPointer<vtkPolyData> mesh)
   this->Mesh = mesh;
   //this->VisitedArray->SetNumberOfValues(this->Mesh->GetNumberOfPoints());
   
-  //check for normals
-  vtkSmartPointer<vtkFloatArray> normals = 
-    vtkFloatArray::SafeDownCast(this->Mesh->GetPointData()->GetNormals());
-  if(!normals)
-    { 
-    cout << "Error: No point normals, can't evaluate condition." << endl;
-    exit(-1);
+  // If the condition has already been specified, forward the mesh to it.
+  // If not, the user will manually have to give the mesh to the condition.
+  for(unsigned int i = 0; i < this->Conditions.size(); ++i)
+    {
+    this->Conditions[i]->SetMesh(mesh);
     }
   
   this->Modified();
@@ -174,24 +204,31 @@ vtkIdType vtkMeshConditionalFrontIterator::Next()
     return this->NextId;
     }
     
-  for(vtkIdType i = 0; i < connectedVertices->GetNumberOfIds(); i++)
+  for(vtkIdType vertexID = 0; vertexID < connectedVertices->GetNumberOfIds(); vertexID++)
     {
     //cout << "Considering vertex " << connectedVertices->GetId(i) << endl;
     //cout << "VisitedArray length is " << this->VisitedArray->GetNumberOfTuples() << endl;
 
-    bool visited = this->VisitedArray->GetValue(connectedVertices->GetId(i));
+    bool visited = this->VisitedArray->GetValue(connectedVertices->GetId(vertexID));
     if(!visited)
       {
       //std::cout << "Inside testing condition..." << std::endl;
-      if(this->Condition(this->NextId, connectedVertices->GetId(i)))
-        {
-        //std::cout << "Adding vertex " << connectedVertices->GetId(i) << " to the queue." << std::endl;
-        this->VertexQueue.push_back(connectedVertices->GetId(i));
-        }
-      else
-        {
-        //std::cout << "Failed condition test." << std::endl;
-        }
+      bool pass = true;
+    
+      // Test all of the conditions
+      for(unsigned int conditionID = 0; conditionID < this->Conditions.size(); ++conditionID)
+	{
+	if(!this->Conditions[conditionID]->IsSimilar(this->NextId, connectedVertices->GetId(vertexID)))
+	  {
+	  pass = false;
+	  break;
+	  }
+	}
+      if(pass)
+	{
+	//std::cout << "Adding vertex " << connectedVertices->GetId(i) << " to the queue." << std::endl;
+	this->VertexQueue.push_back(connectedVertices->GetId(vertexID));
+	}
       }
     else
       {
@@ -215,42 +252,3 @@ bool vtkMeshConditionalFrontIterator::HasNext()
     return true;
     }
 }
-
-/*
-void GetConnectedVertices(vtkSmartPointer<vtkPolyData> mesh, int id, vtkSmartPointer<vtkIdList> connectedVertices)
-{
-    
-  //get all cells that vertex 'id' is a part of
-  vtkSmartPointer<vtkIdList> cellIdList = 
-      vtkSmartPointer<vtkIdList>::New();
-  mesh->GetPointCells(id, cellIdList);
-  
-  for(vtkIdType i = 0; i < cellIdList->GetNumberOfIds(); i++)
-    {
-    //cout << "cellId " << i << " : " << cellIdList->GetId(i) << endl;
-    
-    vtkSmartPointer<vtkIdList> pointIdList = 
-      vtkSmartPointer<vtkIdList>::New();
-    mesh->GetCellPoints(cellIdList->GetId(i), pointIdList);
-    
-    if(pointIdList->GetNumberOfIds() != 2)
-      {
-      cout << "The cell is not a vtkLine! Cannot continue!" << endl;
-      exit(-1);
-      }
-    //cout << "End points are " << pointIdList->GetId(0) << " and " << pointIdList->GetId(1) << endl;
-    
-    if(pointIdList->GetId(0) != id)
-      {
-      //cout << "Connected to " << pointIdList->GetId(0) << endl;
-      connectedVertices->InsertNextId(pointIdList->GetId(0));
-      }
-    else
-      {
-      //cout << "Connected to " << pointIdList->GetId(1) << endl;
-      connectedVertices->InsertNextId(pointIdList->GetId(1));
-      }
-    }
-    
-}
-*/
